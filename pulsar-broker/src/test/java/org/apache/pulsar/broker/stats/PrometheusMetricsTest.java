@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static org.testng.Assert.assertEquals;
 
 import java.io.ByteArrayOutputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -31,6 +32,7 @@ import java.util.regex.Pattern;
 import org.apache.pulsar.broker.service.BrokerTestBase;
 import org.apache.pulsar.broker.stats.prometheus.PrometheusMetricsGenerator;
 import org.apache.pulsar.client.api.Producer;
+import org.junit.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -135,8 +137,50 @@ public class PrometheusMetricsTest extends BrokerTestBase {
         p2.close();
     }
 
+    /** Checks for duplicate type definitions for a metric in the Prometheus metrics output. If the Prometheus parser
+        finds a TYPE definition for the same metric more than once, it errors out:
+        https://github.com/prometheus/prometheus/blob/f04b1b5559a80a4fd1745cf891ce392a056460c9/vendor/github.com/prometheus/common/expfmt/text_parse.go#L499-L502
+        This can happen when including topic metrics, since the same metric is reported multiple times with different labels. For example:
+
+        pulsar_subscriptions_count{cluster="standalone"} 0 1556372982118
+        pulsar_subscriptions_count{cluster="standalone",namespace="public/functions",topic="persistent://public/functions/metadata"} 1.0 1556372982118
+        pulsar_subscriptions_count{cluster="standalone",namespace="public/functions",topic="persistent://public/functions/coordinate"} 1.0 1556372982118
+        pulsar_subscriptions_count{cluster="standalone",namespace="public/functions",topic="persistent://public/functions/assignments"} 1.0 1556372982118
+
+     **/
+     @Test
+    public void testDuplicateMetricTypeDefinitions() throws Exception {
+        Producer<byte[]> p1 = pulsarClient.newProducer().topic("persistent://my-property/use/my-ns/my-topic1").create();
+        Producer<byte[]> p2 = pulsarClient.newProducer().topic("persistent://my-property/use/my-ns/my-topic2").create();
+        for (int i = 0; i < 10; i++) {
+            String message = "my-message-" + i;
+            p1.send(message.getBytes());
+            p2.send(message.getBytes());
+        }
+
+        ByteArrayOutputStream statsOut = new ByteArrayOutputStream();
+        PrometheusMetricsGenerator.generate(pulsar, false, false, statsOut);
+        String metricsStr = new String(statsOut.toByteArray());
+
+        System.out.println(metricsStr);
+
+        Multimap<String, String> typesDefinitions = parseTypesDefinitions(metricsStr);
+        Map<String, String> uniqueKeys = new HashMap<String, String>();
+        typesDefinitions.entries().forEach(e -> {
+            System.out.println(e.getKey() + ": " + e.getValue());
+            if(!uniqueKeys.containsKey(e.getKey())){
+                uniqueKeys.put(e.getKey(), e.getValue());
+            } else {
+                Assert.fail("Duplicate type definition found for TYPE " + e.getKey() );
+            }
+        });
+
+        p1.close();
+        p2.close();
+    }
+
     /**
-     * Hacky parsing of Prometheus text format. Sould be good enough for unit tests
+     * Hacky parsing of Prometheus text format. Should be good enough for unit tests
      */
     private static Multimap<String, Metric> parseMetrics(String metrics) {
         Multimap<String, Metric> parsed = ArrayListMultimap.create();
@@ -171,6 +215,30 @@ public class PrometheusMetricsTest extends BrokerTestBase {
             }
 
             parsed.put(name, m);
+        });
+
+        return parsed;
+    }
+
+    private static Multimap<String, String> parseTypesDefinitions(String metrics) {
+        Multimap<String, String> parsed = ArrayListMultimap.create();
+
+        // Type lines are defined like this:
+        // # TYPE metric_name type
+
+        Pattern pattern = Pattern.compile("^#\\s+TYPE\\s+(.+)\\s+(.+)");
+
+        Splitter.on("\n").split(metrics).forEach(line -> {
+            if (line.isEmpty() || ! line.startsWith("#")) {
+                return;
+            }
+
+            Matcher matcher = pattern.matcher(line);
+            checkArgument(matcher.matches());
+            String metricName = matcher.group(1);
+            String type = matcher.group(2);
+
+            parsed.put(metricName, type);
         });
 
         return parsed;
