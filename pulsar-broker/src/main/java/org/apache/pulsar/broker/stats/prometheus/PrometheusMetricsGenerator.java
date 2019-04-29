@@ -89,6 +89,13 @@ public class PrometheusMetricsGenerator {
             // Write type of metric
             stream.write("# TYPE ").write(metricFamily.name).write(' ')
                     .write(getTypeStr(metricFamily.type)).write('\n');
+            // A summary type will also include a sum and count metric
+            if (getTypeStr(metricFamily.type) == "summary") {
+                stream.write("# TYPE ").write(metricFamily.name).write("_sum ")
+                        .write(getTypeStr(metricFamily.type)).write('\n');
+                stream.write("# TYPE ").write(metricFamily.name).write("_count ")
+                        .write(getTypeStr(metricFamily.type)).write('\n');
+            }
 
             for (int i = 0; i < metricFamily.samples.size(); i++) {
                 Sample sample = metricFamily.samples.get(i);

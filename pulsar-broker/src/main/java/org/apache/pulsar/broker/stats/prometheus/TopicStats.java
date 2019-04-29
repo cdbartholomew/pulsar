@@ -46,6 +46,8 @@ class TopicStats {
     Map<String, AggregatedReplicationStats> replicationStats = new HashMap<>();
     Map<String, AggregatedSubscriptionStats> subscriptionStats = new HashMap<>();
 
+    static Map<String, String> metricWithTypeDefinition = new HashMap<>();
+
     public void reset() {
         subscriptionsCount = 0;
         producersCount = 0;
@@ -64,6 +66,10 @@ class TopicStats {
         subscriptionStats.clear();
         storageWriteLatencyBuckets.reset();
         entrySizeBuckets.reset();
+    }
+
+    static void resetTypes() {
+        metricWithTypeDefinition.clear();
     }
 
     static void printTopicStats(SimpleTextOutputStream stream, String cluster, String namespace, String topic,
@@ -145,7 +151,12 @@ class TopicStats {
     }
 
     static void metricType(SimpleTextOutputStream stream, String name) {
-        stream.write("# TYPE ").write(name).write(" gauge\n");
+
+        if (!metricWithTypeDefinition.containsKey(name)) {
+            metricWithTypeDefinition.put(name, "gauge");
+            stream.write("# TYPE ").write(name).write(" gauge\n");
+        }
+
     }
 
     private static void metric(SimpleTextOutputStream stream, String cluster, String namespace, String topic,

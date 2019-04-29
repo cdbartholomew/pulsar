@@ -20,6 +20,7 @@ package org.apache.pulsar.broker.stats;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
@@ -149,7 +150,8 @@ public class PrometheusMetricsTest extends BrokerTestBase {
         pulsar_subscriptions_count{cluster="standalone",namespace="public/functions",topic="persistent://public/functions/assignments"} 1.0 1556372982118
 
      **/
-     @Test
+    // Running the test twice to make sure types are present when generated multiple times
+    @Test(invocationCount = 2)
     public void testDuplicateMetricTypeDefinitions() throws Exception {
         Producer<byte[]> p1 = pulsarClient.newProducer().topic("persistent://my-property/use/my-ns/my-topic1").create();
         Producer<byte[]> p2 = pulsarClient.newProducer().topic("persistent://my-property/use/my-ns/my-topic2").create();
@@ -163,22 +165,17 @@ public class PrometheusMetricsTest extends BrokerTestBase {
         PrometheusMetricsGenerator.generate(pulsar, false, false, statsOut);
         String metricsStr = new String(statsOut.toByteArray());
 
+        Map<String, String> typeDefs = new HashMap<String, String>();
+        Map<String, String> metricNames = new HashMap<String, String>();
 
-         Map<String, String> typeDefs = new HashMap<String, String>();
-         Map<String, String> metricNames = new HashMap<String, String>();
+        Pattern typePattern = Pattern.compile("^#\\s+TYPE\\s+(\\w+)\\s+(\\w+)");
+        Pattern metricNamePattern = Pattern.compile("^(\\w+)\\{.+");
 
-
-         Pattern typePattern = Pattern.compile("^#\\s+TYPE\\s+(\\w+)\\s+(\\w+)");
-         Pattern metricNamePattern = Pattern.compile("^(\\w+)\\{.+");
-
-
-         Splitter.on("\n").split(metricsStr).forEach(line -> {
+        Splitter.on("\n").split(metricsStr).forEach(line -> {
              if (line.isEmpty()) {
                  return;
              }
-
              if (line.startsWith("#")) {
-
                  // Check for duplicate type definitions
                  Matcher typeMatcher = typePattern.matcher(line);
                  checkArgument(typeMatcher.matches());
@@ -201,19 +198,19 @@ public class PrometheusMetricsTest extends BrokerTestBase {
                      Assert.fail("TYPE definition for " + metricName + " appears after first sample");
 
                  }
-
              } else {
                  Matcher metricMatcher = metricNamePattern.matcher(line);
                  checkArgument(metricMatcher.matches());
                  String metricName = metricMatcher.group(1);
                  metricNames.put(metricName, metricName);
-
-
              }
+        });
 
-         });
-
-
+         // Metrics with no type definition
+         for (String metricName : metricNames.keySet()) {
+             assertTrue(typeDefs.containsKey(metricName), "Metric " + metricName + " does not have a type definition");
+         }
+         
         p1.close();
         p2.close();
     }
