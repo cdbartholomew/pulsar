@@ -142,6 +142,7 @@ public class PrometheusMetricsTest extends BrokerTestBase {
         https://github.com/prometheus/prometheus/blob/f04b1b5559a80a4fd1745cf891ce392a056460c9/vendor/github.com/prometheus/common/expfmt/text_parse.go#L499-L502
         This can happen when including topic metrics, since the same metric is reported multiple times with different labels. For example:
 
+        # TYPE pulsar_subscriptions_count gauge
         pulsar_subscriptions_count{cluster="standalone"} 0 1556372982118
         pulsar_subscriptions_count{cluster="standalone",namespace="public/functions",topic="persistent://public/functions/metadata"} 1.0 1556372982118
         pulsar_subscriptions_count{cluster="standalone",namespace="public/functions",topic="persistent://public/functions/coordinate"} 1.0 1556372982118
@@ -162,18 +163,56 @@ public class PrometheusMetricsTest extends BrokerTestBase {
         PrometheusMetricsGenerator.generate(pulsar, false, false, statsOut);
         String metricsStr = new String(statsOut.toByteArray());
 
-        System.out.println(metricsStr);
 
-        Multimap<String, String> typesDefinitions = parseTypesDefinitions(metricsStr);
-        Map<String, String> uniqueKeys = new HashMap<String, String>();
-        typesDefinitions.entries().forEach(e -> {
-            System.out.println(e.getKey() + ": " + e.getValue());
-            if(!uniqueKeys.containsKey(e.getKey())){
-                uniqueKeys.put(e.getKey(), e.getValue());
-            } else {
-                Assert.fail("Duplicate type definition found for TYPE " + e.getKey() );
-            }
-        });
+         Map<String, String> typeDefs = new HashMap<String, String>();
+         Map<String, String> metricNames = new HashMap<String, String>();
+
+
+         Pattern typePattern = Pattern.compile("^#\\s+TYPE\\s+(\\w+)\\s+(\\w+)");
+         Pattern metricNamePattern = Pattern.compile("^(\\w+)\\{.+");
+
+
+         Splitter.on("\n").split(metricsStr).forEach(line -> {
+             if (line.isEmpty()) {
+                 return;
+             }
+
+             if (line.startsWith("#")) {
+
+                 // Check for duplicate type definitions
+                 Matcher typeMatcher = typePattern.matcher(line);
+                 checkArgument(typeMatcher.matches());
+                 String metricName = typeMatcher.group(1);
+                 String type = typeMatcher.group(2);
+
+                 // From https://github.com/prometheus/docs/blob/master/content/docs/instrumenting/exposition_formats.md
+                 // "Only one TYPE line may exist for a given metric name."
+                 if (!typeDefs.containsKey(metricName)) {
+                     typeDefs.put(metricName, type);
+                 } else {
+                     Assert.fail("Duplicate type definition found for TYPE definition " + metricName);
+                     System.out.println(metricsStr);
+
+                 }
+                 // From https://github.com/prometheus/docs/blob/master/content/docs/instrumenting/exposition_formats.md
+                 // "The TYPE line for a metric name must appear before the first sample is reported for that metric name."
+                 if (metricNames.containsKey(metricName)) {
+                     System.out.println(metricsStr);
+                     Assert.fail("TYPE definition for " + metricName + " appears after first sample");
+
+                 }
+
+             } else {
+                 Matcher metricMatcher = metricNamePattern.matcher(line);
+                 checkArgument(metricMatcher.matches());
+                 String metricName = metricMatcher.group(1);
+                 metricNames.put(metricName, metricName);
+
+
+             }
+
+         });
+
 
         p1.close();
         p2.close();
@@ -215,30 +254,6 @@ public class PrometheusMetricsTest extends BrokerTestBase {
             }
 
             parsed.put(name, m);
-        });
-
-        return parsed;
-    }
-
-    private static Multimap<String, String> parseTypesDefinitions(String metrics) {
-        Multimap<String, String> parsed = ArrayListMultimap.create();
-
-        // Type lines are defined like this:
-        // # TYPE metric_name type
-
-        Pattern pattern = Pattern.compile("^#\\s+TYPE\\s+(.+)\\s+(.+)");
-
-        Splitter.on("\n").split(metrics).forEach(line -> {
-            if (line.isEmpty() || ! line.startsWith("#")) {
-                return;
-            }
-
-            Matcher matcher = pattern.matcher(line);
-            checkArgument(matcher.matches());
-            String metricName = matcher.group(1);
-            String type = matcher.group(2);
-
-            parsed.put(metricName, type);
         });
 
         return parsed;
