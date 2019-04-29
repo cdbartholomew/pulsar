@@ -208,9 +208,26 @@ public class PrometheusMetricsTest extends BrokerTestBase {
 
          // Metrics with no type definition
          for (String metricName : metricNames.keySet()) {
-             assertTrue(typeDefs.containsKey(metricName), "Metric " + metricName + " does not have a type definition");
+
+             if (!typeDefs.containsKey(metricName)) {
+                 // This may be OK if this is a _sum or _count metric from a summary
+                 if(metricName.endsWith("_sum")) {
+                     String summaryMetricName = metricName.substring(0, metricName.indexOf("_sum"));
+                     if (!typeDefs.containsKey(summaryMetricName)) {
+                         Assert.fail("Metric " + metricName + " does not have a corresponding summary type definition");
+                     }
+                 } else if (metricName.endsWith("_count")) {
+                     String summaryMetricName = metricName.substring(0, metricName.indexOf("_count"));
+                     if (!typeDefs.containsKey(summaryMetricName)) {
+                         Assert.fail("Metric " + metricName + " does not have a corresponding summary type definition");
+                     }
+                 } else {
+                     Assert.fail("Metric " + metricName + " does not have a type definition");
+                 }
+
+             }
          }
-         
+
         p1.close();
         p2.close();
     }
