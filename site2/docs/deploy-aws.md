@@ -127,7 +127,7 @@ When you run the Ansible playbook, the following AWS resources will be used:
   * 1 larger VMs for Pulsar [proxy](reference-terminology.md#proxy) ([c5.2xlarge](https://www.ec2instances.info/?selected=c5.2xlarge) instances)
 * An EC2 [security group](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html)
 * A [virtual private cloud](https://aws.amazon.com/vpc/) (VPC) for security
-* An [API Gateway](https://aws.amazon.com/api-gateway/) for connections from the outside world
+* An [Internet Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html) for connections from the outside world
 * A [route table](http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Route_Tables.html) for the Pulsar cluster's VPC
 * A [subnet](http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html) for the VPC
 
