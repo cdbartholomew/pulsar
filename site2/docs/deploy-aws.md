@@ -122,7 +122,7 @@ When you apply the Terraform configuration, the following AWS resources will be 
 
 * 9 total [Elastic Compute Cloud](https://aws.amazon.com/ec2) (EC2) instances running the [ami-9fa343e7](https://access.redhat.com/articles/3135091) Amazon Machine Image (AMI), which runs [Red Hat Enterprise Linux (RHEL) 7.4](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html-single/7.4_release_notes/index). By default, that includes:
   * 3 small VMs for ZooKeeper ([t2.small](https://www.ec2instances.info/?selected=t2.small) instances)
-  * 3 larger VMs for BookKeeper [bookies](reference-terminology.md#bookie) ([i3.xlarge](https://www.ec2instances.info/?selected=i3.xlarge) instances)
+  * 3 larger VMs with NVMe storage for BookKeeper [bookies](reference-terminology.md#bookie) ([i3.xlarge](https://www.ec2instances.info/?selected=i3.xlarge) instances)
   * 2 larger VMs for Pulsar [brokers](reference-terminology.md#broker) ([c5.2xlarge](https://www.ec2instances.info/?selected=c5.2xlarge) instances)
   * 1 larger VMs for Pulsar [proxy](reference-terminology.md#proxy) ([c5.2xlarge](https://www.ec2instances.info/?selected=c5.2xlarge) instances)
 * An EC2 [security group](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html)
@@ -134,15 +134,22 @@ When you apply the Terraform configuration, the following AWS resources will be 
 
 All EC2 instances for the cluster will run in the [us-west-2](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html) region.
 
-### Fetching your Pulsar connection URL
+### Fetching your Pulsar connection URLs
 
-When you apply the Terraform configuration by running `terraform apply`, Terraform will output a value for the `pulsar_service_url`. It should look something like this:
+When you apply the Terraform configuration by running `terraform apply`, Terraform will output a value for the `pulsar_service_url` and the `pulsar_web_url`. They should look something like this:
 
 ```
 pulsar://pulsar-elb-1800761694.us-west-2.elb.amazonaws.com:6650
+http://pulsar-elb-1800761694.us-west-2.elb.amazonaws.com:8080
+
 ```
 
-You can fetch that value at any time by running `terraform output pulsar_service_url` or parsing the `terraform.tstate` file (which is JSON, even though the filename doesn't reflect that):
+You can fetch them at any time by running 
+```bash
+$ terraform output pulsar_service_url
+$ terraform output pulsar_web_url
+```
+or parsing the `terraform.tstate` file (which is JSON, even though the filename doesn't reflect that). For example:
 
 ```bash
 $ cat terraform.tfstate | jq .modules[0].outputs.pulsar_service_url.value
@@ -158,8 +165,8 @@ $ terraform destroy
 
 ## Setup Disks
 
-Before you run the Pulsar playbook, you want to mount the disks to the correct directories on those bookie nodes.
-Since different type of machines would have different disk layout, if you change the `instance_types` in your terraform
+Before you run the main Pulsar playbook, you need to mount the disks to the correct directories on the BookKeeper nodes.
+Since different type of machines have different disk layouts, if you change the `instance_types` in your Terraform
 config, you need to update the task defined in `setup-disk.yaml` file.
 
 To setup disks on bookie nodes, use this command:
