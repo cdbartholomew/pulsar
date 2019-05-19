@@ -118,7 +118,7 @@ Variable name | Description | Default
 
 ### What is installed
 
-When you run the Ansible playbook, the following AWS resources will be used:
+When you apply the Terraform configuration, the following AWS resources will be used:
 
 * 9 total [Elastic Compute Cloud](https://aws.amazon.com/ec2) (EC2) instances running the [ami-9fa343e7](https://access.redhat.com/articles/3135091) Amazon Machine Image (AMI), which runs [Red Hat Enterprise Linux (RHEL) 7.4](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html-single/7.4_release_notes/index). By default, that includes:
   * 3 small VMs for ZooKeeper ([t2.small](https://www.ec2instances.info/?selected=t2.small) instances)
@@ -127,9 +127,10 @@ When you run the Ansible playbook, the following AWS resources will be used:
   * 1 larger VMs for Pulsar [proxy](reference-terminology.md#proxy) ([c5.2xlarge](https://www.ec2instances.info/?selected=c5.2xlarge) instances)
 * An EC2 [security group](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html)
 * A [virtual private cloud](https://aws.amazon.com/vpc/) (VPC) for security
-* An [Internet Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html) for connections from the outside world
+* An [internet gateway](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html) for routing to the outside world
 * A [route table](http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Route_Tables.html) for the Pulsar cluster's VPC
 * A [subnet](http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html) for the VPC
+* a [classic load balancer (ELB)](https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/introduction.html) associated with the proxy for a single external IP address
 
 All EC2 instances for the cluster will run in the [us-west-2](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html) region.
 
