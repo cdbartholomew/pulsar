@@ -38,10 +38,7 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import java.lang.reflect.Type;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.apache.pulsar.functions.runtime.RuntimeUtils.FUNCTIONS_INSTANCE_CLASSPATH;
@@ -232,6 +229,38 @@ public class KubernetesRuntimeTest {
         V1Container containerSpec = container.getFunctionContainer(Collections.emptyList(), resources);
         Assert.assertEquals(containerSpec.getResources().getLimits().get("memory").getNumber().longValue(), expectedRamWithPadding);
         Assert.assertEquals(containerSpec.getResources().getRequests().get("memory").getNumber().longValue(), expectedRamWithPadding);
+    }
+    @Test
+    public void testInitContainer() throws Exception {
+        factory = createKubernetesRuntimeFactory(null, 0, 1.0, 1.0);
+        InstanceConfig config = createJavaInstanceConfig(FunctionDetails.Runtime.JAVA, true);
+        KubernetesRuntime container = factory.createContainer(config, userJarFile, userJarFile, 30l);
+
+        V1Container containerSpec = container.getFunctionInitContainer();
+
+        List<String> expectedCommand = Arrays.asList("sh", "-c", "until nslookup localhost; do echo waiting for localhost; sleep 1; done;");
+        List<String> actualCommand = containerSpec.getCommand();
+        Assert.assertEquals(actualCommand, expectedCommand);
+
+        Assert.assertEquals(containerSpec.getImage(), "busybox");
+
+    }
+
+    @Test
+    public void testPodSpecInitContainer() throws Exception {
+
+        factory = createKubernetesRuntimeFactory(null, 0, 1.0, 1.0);
+        InstanceConfig config = createJavaInstanceConfig(FunctionDetails.Runtime.JAVA, true);
+        KubernetesRuntime container = factory.createContainer(config, userJarFile, userJarFile, 30l);
+
+        Function.Resources resources = Function.Resources.newBuilder().setRam(1000).build();
+
+        List<String> instanceCommand = Arrays.asList("bin/pulsar-admin", "functions", "--download");
+
+        V1PodSpec podSpec = container.getPodSpec(instanceCommand, resources);
+
+        Assert.assertFalse(podSpec.getInitContainers().isEmpty());
+
     }
 
 

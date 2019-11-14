@@ -65,6 +65,7 @@ import org.apache.pulsar.functions.utils.Actions;
 import org.apache.pulsar.functions.utils.FunctionCommon;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -78,6 +79,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.URI;
 
 import static java.net.HttpURLConnection.HTTP_CONFLICT;
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
@@ -117,6 +119,8 @@ public class KubernetesRuntime implements Runtime {
     );
     private static final long GRPC_TIMEOUT_SECS = 5;
     private final boolean authenticationEnabled;
+    private static final String INIT_CONTAINER_NAME = "functioninit";
+    private static final String INIT_CONTAINER_IMAGE = "busybox";
 
     // The thread that invokes the function
     @Getter
@@ -899,7 +903,8 @@ public class KubernetesRuntime implements Runtime {
         return labels;
     }
 
-    private V1PodSpec getPodSpec(List<String> instanceCommand, Function.Resources resource) {
+    @VisibleForTesting
+    V1PodSpec getPodSpec(List<String> instanceCommand, Function.Resources resource) {
         final V1PodSpec podSpec = new V1PodSpec();
 
         // set the termination period to 0 so pods can be deleted quickly
@@ -909,9 +914,21 @@ public class KubernetesRuntime implements Runtime {
         // https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/#taint-based-evictions
         podSpec.setTolerations(getTolerations());
 
+        // set the container
         List<V1Container> containers = new LinkedList<>();
         containers.add(getFunctionContainer(instanceCommand, resource));
         podSpec.containers(containers);
+
+        // if the hostname can be extracted from the pulsarAdminUrl,
+        // create an init container to poll until the hostname
+        // can be resolved by DNS to avoid startup race condition
+        try {
+            List<V1Container> initContainers = new LinkedList<>();
+            initContainers.add(getFunctionInitContainer());
+            podSpec.initContainers(initContainers);
+        } catch (URISyntaxException e) {
+            log.warn("Could not create init container. Failed to parse pulsarAdminUrl: {}", e.getMessage());
+        }
 
         // Configure secrets
         secretsProviderConfigurator.configureKubernetesRuntimeSecretsProvider(podSpec, PULSARFUNCTIONS_CONTAINER_NAME, instanceConfig.getFunctionDetails());
@@ -971,6 +988,25 @@ public class KubernetesRuntime implements Runtime {
 
         // set container ports
         container.setPorts(getFunctionContainerPorts());
+
+        return container;
+    }
+
+    @VisibleForTesting
+    V1Container getFunctionInitContainer() throws URISyntaxException {
+        final V1Container container = new V1Container().name(INIT_CONTAINER_NAME);
+
+        // set up the container images
+        container.setImage(INIT_CONTAINER_IMAGE);
+        container.setImagePullPolicy(imagePullPolicy);
+
+        URI uri = new URI(pulsarAdminUrl);
+
+        String pollingCommand = "until nslookup " + uri.getHost() + "; do echo waiting for " + uri.getHost() + "; sleep 1; done;";
+        List<String> instanceCommand = Arrays.asList("sh", "-c", pollingCommand);
+
+        // set up the container command
+        container.setCommand(instanceCommand);
 
         return container;
     }
