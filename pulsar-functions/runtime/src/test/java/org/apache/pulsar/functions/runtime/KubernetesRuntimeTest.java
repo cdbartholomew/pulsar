@@ -232,7 +232,7 @@ public class KubernetesRuntimeTest {
     }
     @Test
     public void testInitContainer() throws Exception {
-        factory = createKubernetesRuntimeFactory(null, 0, 1.0, 1.0);
+        factory = createKubernetesRuntimeFactory(null, 0);
         InstanceConfig config = createJavaInstanceConfig(FunctionDetails.Runtime.JAVA, true);
         KubernetesRuntime container = factory.createContainer(config, userJarFile, userJarFile, 30l);
 
@@ -249,7 +249,7 @@ public class KubernetesRuntimeTest {
     @Test
     public void testPodSpecInitContainer() throws Exception {
 
-        factory = createKubernetesRuntimeFactory(null, 0, 1.0, 1.0);
+        factory = createKubernetesRuntimeFactory(null, 0);
         InstanceConfig config = createJavaInstanceConfig(FunctionDetails.Runtime.JAVA, true);
         KubernetesRuntime container = factory.createContainer(config, userJarFile, userJarFile, 30l);
 
