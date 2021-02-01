@@ -35,10 +35,14 @@ COPY scripts/install-pulsar-client-27.sh /pulsar/bin
 COPY scripts/install-pulsar-client-37.sh /pulsar/bin
 
 
+
 ### Create 2nd stage from OpenJDK image
 ### and add Python dependencies (for Pulsar functions)
 
 FROM openjdk:8-jdk-slim
+COPY --from=pulsar /pulsar /pulsar
+
+
 
 # Install some utilities
 RUN apt-get update \
@@ -56,20 +60,39 @@ RUN python3.7 get-pip.py
 
 ADD target/python-client/ /pulsar/pulsar-client
 ADD target/cpp-client/ /pulsar/cpp-client
+RUN /pulsar/bin/install-pulsar-client-27.sh
+RUN /pulsar/bin/install-pulsar-client-37.sh
 RUN echo networkaddress.cache.ttl=1 >> $JAVA_HOME/jre/lib/security/java.security
 RUN apt-get update \
      && apt install -y /pulsar/cpp-client/*.deb \
      && apt-get clean \
      && rm -rf /var/lib/apt/lists/*
 
-VOLUME  ["/pulsar/conf", "/pulsar/data"]
-
-ENV PULSAR_ROOT_LOGGER=INFO,CONSOLE
-
-
-COPY --from=pulsar /pulsar /pulsar
 WORKDIR /pulsar
 
-RUN /pulsar/bin/install-pulsar-client-27.sh
-RUN /pulsar/bin/install-pulsar-client-37.sh
+# Ensure permissions will allow to run as non-root user for OpenShift
 
+RUN mkdir -p /pulsar/data
+RUN mkdir -p /pulsar/logs
+RUN mkdir -p /pulsar/conf
+RUN mkdir -p /pulsar/download/pulsar_functions
+
+RUN chgrp -R 0 /pulsar/data && \
+    chmod -R g=u /pulsar/data
+RUN chgrp -R 0 /pulsar/logs && \
+    chmod -R g=u /pulsar/logs
+RUN chgrp -R 0 /pulsar/conf && \
+    chmod -R g=u /pulsar/conf
+RUN chgrp -R 0 /pulsar/download && \
+    chmod -R g=u /pulsar/download
+
+VOLUME  ["/pulsar/conf", "/pulsar/data"]
+
+# Need to set umask so that directories/files created a runtime writable
+# by the random OpenShift user ID
+COPY ./docker-entrypoint.sh /
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+# Set to non-root user
+USER 1001
+ENV PULSAR_ROOT_LOGGER=INFO,CONSOLE
